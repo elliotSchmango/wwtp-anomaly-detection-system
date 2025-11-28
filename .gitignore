@@ -4,3 +4,10 @@ data/
 
 # ignore .env file
 .env
+
+#ignore virtual environment
+venv/
+
+# extra python artifacts:
+__pycache__/
+*.py[cod]
