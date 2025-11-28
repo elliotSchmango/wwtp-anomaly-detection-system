@@ -1,0 +1,6 @@
+# project specific:
+models/
+data/
+
+# ignore .env file
+.env
