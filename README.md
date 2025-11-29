@@ -81,8 +81,52 @@ Use this mode if you are modifying the code or don't have Docker installed.
 
 ### Usage Guide
 
-* **🛡️ Sentry Mode:**
+* **Sentry Mode:**
     * Toggles the main security loop.
     * The system will cycle through the defined **Zones** (PTZ presets).
     * It grabs frames, runs the **Autoencoder**, and checks for anomalies.
-    * If an anomaly is detected, it runs
+    * If an anomaly is detected, it runs the **Classifier** and logs the alert to Azure.
+
+* **Calibrate:**
+    * *Disable Sentry Mode first.*
+    * Moves the camera to each zone and captures **50 frames** of "normal" data.
+    * Images are saved to `data/zone_X/`.
+
+* **Train:**
+    * *Disable Sentry Mode first.*
+    * Uses the data captured in **Calibration** to train a new Autoencoder model locally.
+    * Automatically exports the result to `models/autoencoder.onnx`.
+    * **Note:** Training may take a few minutes depending on your hardware.
+
+---
+
+## Training Guide
+
+This system uses two different AI models. It is important to understand when to train each one.
+
+### 1. Autoencoder (Anomaly Detector)
+* **Role:** Learns what "Normal" looks like for your specific camera angle and lighting.
+* **Data Source:** Captures images automatically via the **"Calibrate"** button.
+* **When to Train:**
+    * **Initially:** When you first install the camera.
+    * **Environment Change:** If you move the camera, change the zoom, or if the lighting conditions change drastically (e.g., day vs. night).
+    * **False Positives:** If the system keeps alerting on normal things, run Calibration and Train again to teach it those new normal conditions.
+
+### 2. Classifier (Anomaly Type Identifier)
+* **Role:** Identifies *what* the anomaly is (Fire, Leak, Corrosion, Human).
+* **Data Source:** Requires a manually curated dataset in `data/classifier_data/`.
+* **When to Train:**
+    * **Once:** You typically only need to train this once. "Fire" always looks like fire.
+    * **Do NOT Train Daily:** Unlike the Autoencoder, this model does not need to learn your specific room.
+    * **New Capabilities:** Train again only if you add a new class (e.g., "Smoke") or if you find specific objects that confuse the model (add them to the training folders and retrain).
+
+#### Classifier Data Structure
+To train the classifier, organize your images like this:
+```text
+data/classifier_data/
+├── Corrosion/
+│   ├── img1.jpg
+│   └── ...
+├── Fire/
+├── Human/
+└── Leaky Pipes/
