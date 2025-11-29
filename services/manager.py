@@ -42,6 +42,11 @@ class ServiceManager:
         from services.training import TrainingTask #avoid looping imports
         task = TrainingTask(self.stop_event)
         self._start_thread(task.run, "TRAINING", "Starting Training...")
+    
+    def start_classifier_training(self):
+        from services.train_classifier import ClassifierTrainingTask
+        task = ClassifierTrainingTask(self.stop_event)
+        self._start_thread(task.run, "TRAINING_CLF", "Starting Classifier Training...")
 
     #tells active thread to stop and waits for it to finish
     def stop_active(self):

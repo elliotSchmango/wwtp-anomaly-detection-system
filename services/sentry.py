@@ -8,7 +8,7 @@ from core.state import StateManager
 from azure.telemetry import TelemetrySender
 from config.settings import settings
 
-logger = logging.getLogger("Eagle.Sentry")
+logger = logging.getLogger("State.Sentry")
 
 class SentryLoop:
     def __init__(self, stop_event):
