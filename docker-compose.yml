@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  eagle:
+    build: .
+    container_name: wwtp-anomaly-guard
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./.env:/app/.env
+      - ./data:/app/data
+      - ./models:/app/models
+    shm_size: '2gb'
