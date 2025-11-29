@@ -45,8 +45,10 @@ class SentryLoop:
                     if frame is None:
                         logger.warning("Empty frame received")
                         continue
+                    
+                    self.state.update(latest_frame=frame) #update UI
 
-                    #run through anomaly
+                    #run through AE model
                     mse = ai.detect_anomaly(frame)
                     is_anomaly = mse > settings.AE_THRESHOLD
                     
