@@ -39,8 +39,9 @@ class ServiceManager:
         self._start_thread(task.run, "CALIBRATING", "Starting Calibration...")
 
     def start_training(self):
-        #placeholder for training logic
-        pass
+        from services.training import TrainingTask #avoid looping imports
+        task = TrainingTask(self.stop_event)
+        self._start_thread(task.run, "TRAINING", "Starting Training...")
 
     #tells active thread to stop and waits for it to finish
     def stop_active(self):
