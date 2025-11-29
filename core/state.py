@@ -1,7 +1,7 @@
 import threading
 import time
 from dataclasses import dataclass, asdict
-from typing import Optional
+from typing import Optional, Any
 
 @dataclass
 class AppState:
@@ -14,6 +14,9 @@ class AppState:
     last_anomaly_score: float = 0.0
     last_anomaly_label: str = "None"
     last_detection_time: Optional[str] = None
+
+    #for visualization
+    latest_frame: Any = None
     
     progress: int = 0
     logs: list[str] = None
@@ -48,7 +51,11 @@ class StateManager:
     #Returns copy of state, then updating UI
     def get_snapshot(self) -> dict:
         with self._lock:
-            return asdict(self.state)
+            #avoiding deepcopy problems with numpy arrays
+            d = asdict(self.state)
+            d['latest_frame'] = self.state.latest_frame
+            return d
+        
 
     def set_mode(self, mode: str):
         with self._lock:

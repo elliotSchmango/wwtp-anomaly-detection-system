@@ -20,3 +20,6 @@
   3. Runs Classifier (If Anomaly Found).
   4. Uploads Alert to Azure.
 - **Calibration:** `services/calibration.py` automates data collection. It moves to each zone and saves 50 images to `data/zone_X` for training.
+
+### Frontend
+- **UI:** `ui/app.py` is a Streamlit dashboard. It polls `StateManager` every second to update the video feed, status indicators, and logs. It communicates with `ServiceManager` to toggle Sentry and Calibration modes.
