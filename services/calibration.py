@@ -53,6 +53,8 @@ class CalibrationTask:
                     if frame is None:
                         time.sleep(0.1)
                         continue
+                        
+                    self.state.update(latest_frame=frame) #update UI
 
                     #save every n-th frame
                     frame_count += 1
