@@ -12,7 +12,7 @@ import glob
 from core.state import StateManager
 from config.settings import settings
 
-logger = logging.getLogger("Eagle.Training")
+logger = logging.getLogger("State.TrainAE")
 
 class ConvAutoencoder(nn.Module):
     def __init__(self):

@@ -46,13 +46,17 @@ with st.sidebar:
     
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("📸 Calibrate", disabled=is_sentry_active):
+        if st.button("Calibrate", disabled=is_sentry_active):
             svc_mgr.start_calibration()
             st.rerun()
     
     with col2:
-        if st.button("Train", disabled=is_sentry_active):
+        if st.button("Train Autoencoder", disabled=is_sentry_active):
             svc_mgr.start_training()
+            st.rerun()
+    
+        if st.button("Train Classifier", disabled=is_sentry_active):
+            svc_mgr.start_classifier_training()
             st.rerun()
             
     if st.button("STOP ALL TASKS", type="primary"):
