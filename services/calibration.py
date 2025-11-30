@@ -43,8 +43,13 @@ class CalibrationTask:
                 
                 #allow a second to to let auto-focus/exposure to calibrate
                 for _ in range(self.warmup_frames):
-                    time.sleep(0.5) #0.5 second
-                    camera.get_frame()
+                    if self.stop_event.is_set(): break
+                    time.sleep(0.5) 
+                    
+                    #pushing frame to UI so user sees the camera view
+                    frame = camera.get_frame()
+                    if frame is not None:
+                        self.state.update(latest_frame=frame)
 
                 while saved_count < self.samples_per_zone:
                     if self.stop_event.is_set(): break

@@ -44,19 +44,20 @@ with st.sidebar:
     #show available controls:
     st.subheader("Manual Operations")
     
-    if st.button("Calibrate", disabled=is_sentry_active, use_container_width=True):
+    # Updated: use_container_width=True -> width="stretch"
+    if st.button("Calibrate", disabled=is_sentry_active, width="stretch"):
         svc_mgr.start_calibration()
         st.rerun()
     
-    if st.button("Train Autoencoder", disabled=is_sentry_active, use_container_width=True):
+    if st.button("Train Autoencoder", disabled=is_sentry_active, width="stretch"):
         svc_mgr.start_training()
         st.rerun()
             
-    if st.button("Train Classifier", disabled=is_sentry_active, use_container_width=True):
+    if st.button("Train Classifier", disabled=is_sentry_active, width="stretch"):
         svc_mgr.start_classifier_training()
         st.rerun()
             
-    if st.button("STOP ALL TASKS", type="primary", use_container_width=True):
+    if st.button("STOP ALL TASKS", type="primary", width="stretch"):
         svc_mgr.stop_active()
         st.rerun()
 
@@ -71,7 +72,8 @@ with col_main:
     if frame is not None:
         #since opencv is BGR, streamlit also expects RGB
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        st.image(frame_rgb, channels="RGB", use_column_width=True)
+        # Updated: use_container_width=True -> width="stretch"
+        st.image(frame_rgb, channels="RGB", width="stretch")
     else:
         st.info("Waiting for camera feed...")
 
