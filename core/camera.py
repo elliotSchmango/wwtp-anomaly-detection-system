@@ -2,11 +2,12 @@ import cv2
 import time
 import threading
 import logging
+import os
 from onvif import ONVIFCamera
 from config.settings import settings
 
-#logger init
-logger = logging.getLogger("Eagle.Camera")
+#logger config
+logger = logging.getLogger("State.Camera")
 logging.basicConfig(level=logging.INFO)
 
 class CameraClient:
@@ -21,18 +22,18 @@ class CameraClient:
         self.running = False
         self.lock = threading.Lock()
         
-        #building RTSP URL (Standard format for Tapo TP-Link Cam)
-        # rtsp://user:pass@IP:554/stream1
+        # Build RTSP URL
         self.rtsp_url = (
             f"rtsp://{settings.CAMERA_USER}:{settings.CAMERA_PASS}@"
             f"{settings.CAMERA_IP}:{settings.RTSP_PORT}/stream1"
         )
 
-    #connects to ONVIF and starts RTSP stream thread
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+
+    #Connects to ONVIF control and starts RTSP stream thread
     def connect(self):
         try:
-            #connect ONVIF
-            #adjust wsdl_dir if needed for Docker vs Local (check https://github.com/yingchengpa/python-onvif2-zeep)
+            #connect to ONVIF (PTZ Control)
             self.mycam = ONVIFCamera(
                 settings.CAMERA_IP, 
                 settings.ONVIF_PORT, 
@@ -41,26 +42,25 @@ class CameraClient:
             )
             self.media = self.mycam.create_media_service()
             self.ptz = self.mycam.create_ptz_service()
-            self.profile = self.media.GetProfiles()[0] #use first profile
+            self.profile = self.media.GetProfiles()[0]
             
-            #connect RTSP
+            #connect to RTSP (Video)
             self.cap = cv2.VideoCapture(self.rtsp_url)
             if not self.cap.isOpened():
-                raise RuntimeError(f"RTSP stream not available: {self.rtsp_url}")
+                raise RuntimeError(f"Could not open RTSP stream at {self.rtsp_url}")
             
-            #start BG Frame Grabber
             self.running = True
             threading.Thread(target=self._update_loop, daemon=True).start()
             
-            logger.info(f"Connected to Camera Successfully at {settings.CAMERA_IP}")
+            logger.info(f"Connected to Camera at {settings.CAMERA_IP}")
             return True
             
-        except Exception as e: #if it doesn't work:
+        except Exception as e:
             logger.error(f"Camera Connection Failed: {e}")
             return False
 
-    #Continuously grabs frames to keep the buffer empty
     def _update_loop(self):
+        """Continuously grabs frames to keep the buffer empty (Low Latency)"""
         while self.running and self.cap.isOpened():
             ret, frame = self.cap.read()
             if ret:
@@ -68,38 +68,36 @@ class CameraClient:
                     self.latest_frame = frame
                     self.last_frame_time = time.time()
             else:
-                # If stream drops, wait briefly before retrying
                 time.sleep(0.1)
 
-    #return most recent frame
+    #return most recent frame (thread-safe copy)
     def get_frame(self):
         with self.lock:
             if self.latest_frame is not None:
                 return self.latest_frame.copy()
             return None
 
-    #moves camera to specific onvif preset index
+    #moves camera to a specific ONVIF preset index
     def move_to_preset(self, preset_index: int):
         try:
             if not self.ptz:
                 logger.warning("PTZ service not initialized")
                 return
 
-            self.ptz.GotoPreset({
-                'ProfileToken': self.profile.token,
-                'PresetToken': str(preset_index), 
-                'Speed': {'x': 1, 'y': 1, 'z': 1} #since presets are usually strings like '1', '2' on Tapo
-            })
+            request = self.ptz.create_type('GotoPreset')
+            request.ProfileToken = self.profile.token
+            request.PresetToken = str(preset_index)
+            
+            self.ptz.GotoPreset(request)
             logger.info(f"Moving to Preset {preset_index}...")
             
-            # Mechanical Wait time - adjust based on your camera speed
+            #wait time for camera to move per zone
             time.sleep(3.0) 
             
         except Exception as e:
-            logger.error(f"PTZ Move Failed: {e}") #log if exception occurs
+            logger.error(f"PTZ Move Failed: {e}")
 
     def release(self):
-        """Cleanup resources"""
         self.running = False
         if self.cap:
             self.cap.release()
