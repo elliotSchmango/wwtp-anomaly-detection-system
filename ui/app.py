@@ -44,22 +44,19 @@ with st.sidebar:
     #show available controls:
     st.subheader("Manual Operations")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Calibrate", disabled=is_sentry_active):
-            svc_mgr.start_calibration()
-            st.rerun()
+    if st.button("Calibrate", disabled=is_sentry_active, use_container_width=True):
+        svc_mgr.start_calibration()
+        st.rerun()
     
-    with col2:
-        if st.button("Train Autoencoder", disabled=is_sentry_active):
-            svc_mgr.start_training()
-            st.rerun()
-    
-        if st.button("Train Classifier", disabled=is_sentry_active):
-            svc_mgr.start_classifier_training()
-            st.rerun()
+    if st.button("Train Autoencoder", disabled=is_sentry_active, use_container_width=True):
+        svc_mgr.start_training()
+        st.rerun()
             
-    if st.button("STOP ALL TASKS", type="primary"):
+    if st.button("Train Classifier", disabled=is_sentry_active, use_container_width=True):
+        svc_mgr.start_classifier_training()
+        st.rerun()
+            
+    if st.button("STOP ALL TASKS", type="primary", use_container_width=True):
         svc_mgr.stop_active()
         st.rerun()
 
@@ -97,7 +94,7 @@ with col_stats:
     st.text_area("Console Output", log_text, height=200, disabled=True)
     
     #progress bar (for Calibration/Training)
-    if snapshot['mode'] in ["CALIBRATING", "TRAINING"]:
+    if snapshot['mode'] in ["CALIBRATING", "TRAINING", "TRAINING_CLF"]:
         st.progress(snapshot['progress'] / 100)
 
 #auto-refresh: run script every 1 second to update UI

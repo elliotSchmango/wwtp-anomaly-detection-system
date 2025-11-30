@@ -1,5 +1,5 @@
 # HRSD's wwtp-anomaly-detection-system (WADS)
-## By Elliot Hong
+### By Elliot Hong
 
 ## Modules
 ### Core
@@ -24,7 +24,7 @@
 ### Frontend
 - **UI:** `ui/app.py` is a Streamlit dashboard. It polls `StateManager` every second to update the video feed, status indicators, and logs. It communicates with `ServiceManager` to toggle Sentry and Calibration modes.
 
-------
+---
 
 ## How to Run:
 
@@ -50,6 +50,36 @@
 4.  **Access the Dashboard:**
     Open your browser and navigate to:
     `http://localhost:8501`
+
+---
+
+## Hardware Setup (TP-Link Tapo C260)
+
+**Note:** This project is specifically configured for the **TP-Link Tapo C260** Pan/Tilt Security Wi-Fi Camera.
+
+### 1. Create a Camera Account
+You **cannot** use your TP-Link Cloud email/password for this. You must create a specific local access account.
+1.  Open the **Tapo App** on your phone.
+2.  Tap on your C260 device card to enter the live view.
+3.  Tap the **Gear Icon** (Settings) in the top right.
+4.  Go to **Advanced Settings** -> **Camera Account**.
+5.  Create a **Username** and **Password**.
+    * *These will be the `CAMERA_USER` and `CAMERA_PASS` in your `.env` file.*
+
+### 2. Get the IP Address
+1.  While still in **Device Settings**, tap on **Device Info**.
+2.  Find the **IP Address** (e.g., `192.168.1.50`).
+    * *This will be the `CAMERA_IP` in your `.env` file.*
+    * *Tip: It is highly recommended to set a **Static IP** for the camera in your Router settings so the IP doesn't change if the power goes out.*
+
+### 3. Configure Zones (Presets)
+The system uses the camera's onboard **Presets** to define the scanning zones. You must set these up manually in the Tapo App.
+1.  Open the **Tapo App** and go to the Live View.
+2.  Use the Pan/Tilt controls to move the camera to the first position you want to monitor.
+3.  Tap **Pan & Tilt** -> **Presets** (or Marks).
+4.  **Add Preset** and name it **"1"**.
+5.  Move the camera to the next position and save it as **"2"**, then **"3"**.
+    * *Note: The preset names must match the integers in `config/settings.py` (default: `ZONES = [1, 2, 3]`). If you want more zones, add presets "4", "5", etc., and update the list in `settings.py`.*
 
 ---
 
@@ -104,24 +134,6 @@ data/classifier_data/
 ├── Fire/
 ├── Human/
 └── Leaky Pipes/
+```
 
 ---
-
-## Hardware Setup (TP-Link Tapo C260)
-
-**Note:** This project is specifically configured for the **TP-Link Tapo C260** Pan/Tilt Security Wi-Fi Camera.
-
-### 1. Create a Camera Account
-You **cannot** use your TP-Link Cloud email/password for this. You must create a specific local access account.
-1.  Open the **Tapo App** on your phone.
-2.  Tap on your C260 device card to enter the live view.
-3.  Tap the **Gear Icon** (Settings) in the top right.
-4.  Go to **Advanced Settings** -> **Camera Account**.
-5.  Create a **Username** and **Password**.
-    * *These will be the `CAMERA_USER` and `CAMERA_PASS` in your `.env` file.*
-
-### 2. Get the IP Address
-1.  While still in **Device Settings**, tap on **Device Info**.
-2.  Find the **IP Address** (e.g., `192.168.1.50`).
-    * *This will be the `CAMERA_IP` in your `.env` file.*
-    * *Tip: It is highly recommended to set a **Static IP** for the camera in your Router settings so the IP doesn't change if the power goes out.*
