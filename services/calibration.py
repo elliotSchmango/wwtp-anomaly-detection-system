@@ -43,7 +43,7 @@ class CalibrationTask:
                 
                 #allow a second to to let auto-focus/exposure to calibrate
                 for _ in range(self.warmup_frames):
-                    time.sleep(1) #1 second
+                    time.sleep(0.5) #0.5 second
                     camera.get_frame()
 
                 while saved_count < self.samples_per_zone:
