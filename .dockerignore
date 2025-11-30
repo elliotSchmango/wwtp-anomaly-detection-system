@@ -1,0 +1,18 @@
+# Ignore huge data/model folders during build
+data/
+models/
+classifier_data/
+
+# Ignore virtual env
+venv/
+.venv/
+
+# Ignore git history
+.git/
+
+# Ignore secrets
+.env
+
+# Python cache
+__pycache__/
+*.pyc

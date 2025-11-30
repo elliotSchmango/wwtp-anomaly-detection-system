@@ -5,7 +5,7 @@ from datetime import datetime
 from core.camera import CameraClient
 from core.inference import InferenceEngine
 from core.state import StateManager
-from azure.telemetry import TelemetrySender
+from cloud.telemetry import TelemetrySender
 from config.settings import settings
 
 logger = logging.getLogger("State.Sentry")
