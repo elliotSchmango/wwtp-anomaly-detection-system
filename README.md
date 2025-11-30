@@ -26,9 +26,7 @@
 
 ------
 
-## How to Run
-
-### Option A: Deployment (Docker) - Recommended
+## How to Run:
 
 1.  **Clone the Repository:**
     ```bash
@@ -52,30 +50,6 @@
 4.  **Access the Dashboard:**
     Open your browser and navigate to:
     `http://localhost:8501`
-
----
-
-### Option B: Local Development (Python venv)
-Use this mode if you are modifying the code or don't have Docker installed.
-
-1.  **Set up Virtual Environment:**
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate  # On Windows: .\venv\Scripts\Activate
-    ```
-
-2.  **Install Dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3.  **Configure Environment:**
-    Make sure your `.env` file is set up (see above).
-
-4.  **Run the App:**
-    ```bash
-    streamlit run ui/app.py
-    ```
 
 ---
 
@@ -130,3 +104,24 @@ data/classifier_data/
 ├── Fire/
 ├── Human/
 └── Leaky Pipes/
+
+---
+
+## Hardware Setup (TP-Link Tapo C260)
+
+**Note:** This project is specifically configured for the **TP-Link Tapo C260** Pan/Tilt Security Wi-Fi Camera.
+
+### 1. Create a Camera Account
+You **cannot** use your TP-Link Cloud email/password for this. You must create a specific local access account.
+1.  Open the **Tapo App** on your phone.
+2.  Tap on your C260 device card to enter the live view.
+3.  Tap the **Gear Icon** (Settings) in the top right.
+4.  Go to **Advanced Settings** -> **Camera Account**.
+5.  Create a **Username** and **Password**.
+    * *These will be the `CAMERA_USER` and `CAMERA_PASS` in your `.env` file.*
+
+### 2. Get the IP Address
+1.  While still in **Device Settings**, tap on **Device Info**.
+2.  Find the **IP Address** (e.g., `192.168.1.50`).
+    * *This will be the `CAMERA_IP` in your `.env` file.*
+    * *Tip: It is highly recommended to set a **Static IP** for the camera in your Router settings so the IP doesn't change if the power goes out.*
