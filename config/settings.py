@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     
     #Azure integration
     IOTHUB_CONN_STRING: str = ""
+
+    #"ssim" ("Novel") or "mse" (Baseline)
+    TRAINING_MODE: str = "ssim"
     
     class Config:
         env_file = ".env"
