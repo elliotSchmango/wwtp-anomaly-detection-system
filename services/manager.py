@@ -39,7 +39,7 @@ class ServiceManager:
         self._start_thread(task.run, "CALIBRATING", "Starting Calibration...")
 
     def start_training(self):
-        from services.training import TrainingTask #avoid looping imports
+        from services.train_autoencoder import TrainingTask #avoid looping imports
         task = TrainingTask(self.stop_event)
         self._start_thread(task.run, "TRAINING", "Starting Training...")
     
