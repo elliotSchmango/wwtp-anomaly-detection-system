@@ -16,8 +16,7 @@ from config.settings import settings
 
 logger = logging.getLogger("State.TrainAE")
 
-#structural similarity index: SSIM
-#let the model to learn TEXTURE, not just color
+#structural similarity index (SSIM) loss
 class SSIMLoss(nn.Module):
     def __init__(self, window_size=11, size_average=True):
         super(SSIMLoss, self).__init__()
@@ -52,28 +51,27 @@ class SSIMLoss(nn.Module):
 
     def forward(self, img1, img2):
         (_, channel, _, _) = img1.size()
+        
+        #robust device handling
         if channel == self.channel and self.window.data.type() == img1.data.type():
             window = self.window
         else:
             window = self.create_window(self.window_size, channel)
-            if img1.is_cuda: window = window.cuda(img1.get_device())
-            window = window.type_as(img1)
+            window = window.to(img1.device).type_as(img1)
             self.window = window
             self.channel = channel
-        #minimize loss
+            
         return 1 - self._ssim(img1, img2, window, self.window_size, channel, self.size_average)
 
-#normal ae architecture
+#standard AE architecture
 class ConvAutoencoder(nn.Module):
     def __init__(self):
         super().__init__()
-        # Encoder
         self.encoder = nn.Sequential(
             nn.Conv2d(3, 32, 3, padding=1), nn.BatchNorm2d(32), nn.ReLU(), nn.MaxPool2d(2),
             nn.Conv2d(32, 64, 3, padding=1), nn.BatchNorm2d(64), nn.ReLU(), nn.MaxPool2d(2),
             nn.Conv2d(64, 128, 3, padding=1), nn.BatchNorm2d(128), nn.ReLU(), nn.MaxPool2d(2)
         )
-        # Decoder
         self.decoder = nn.Sequential(
             nn.ConvTranspose2d(128, 64, 2, stride=2), nn.BatchNorm2d(64), nn.ReLU(),
             nn.ConvTranspose2d(64, 32, 2, stride=2), nn.BatchNorm2d(32), nn.ReLU(),
@@ -85,6 +83,7 @@ class ConvAutoencoder(nn.Module):
         x = self.decoder(x)
         return x
 
+#access dataset
 class ZoneDataset(Dataset):
     def __init__(self, root_dir, transform=None):
         self.image_paths = glob.glob(str(root_dir / "zone_*" / "*.jpg"))
@@ -102,17 +101,21 @@ class ZoneDataset(Dataset):
         except Exception as e:
             return torch.zeros(3, settings.AE_IMG_SIZE, settings.AE_IMG_SIZE)
 
+#training task
 class TrainingTask:
     def __init__(self, stop_event):
         self.stop_event = stop_event
         self.state = StateManager()
-        self.epochs = 25 #25 for denoising
+        self.mode = settings.TRAINING_MODE.lower() # "mse" or "ssim"
+        self.epochs = 25
         self.batch_size = 8
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def run(self):
         try:
-            logger.info("Starting Denoising SSIM Training...")
+            logger.info(f"Starting Training Task ({self.mode.upper()})...")
+            
+            #preprocess data
             transform = transforms.Compose([
                 transforms.Resize((settings.AE_IMG_SIZE, settings.AE_IMG_SIZE)),
                 transforms.ToTensor(),
@@ -123,17 +126,17 @@ class TrainingTask:
                 raise RuntimeError("No training data found! Run Calibration first.")
                 
             dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
-            self.state.update(log=f"Found {len(dataset)} images. Training on {self.device}...")
+            self.state.update(log=f"Found {len(dataset)} images. Training {self.mode.upper()} on {self.device}...")
 
             model = ConvAutoencoder().to(self.device)
             
-            #new method: hybrid loss metric combining SSIM with L1
-            mse_criterion = nn.L1Loss() 
+            #metric definitions
+            mse_criterion = nn.MSELoss() if self.mode == "mse" else nn.L1Loss()
             ssim_criterion = SSIMLoss().to(self.device)
             optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
+            #training loop
             model.train()
-            
             for epoch in range(self.epochs):
                 if self.stop_event.is_set(): break
                 
@@ -141,19 +144,23 @@ class TrainingTask:
                 for img_clean in dataloader:
                     img_clean = img_clean.to(self.device)
                     
-                    #another "novel" method(?): Denoising Injection
-                    #idea is to add noise to input, but calculate loss against CLEAN original
-                    noise = torch.randn_like(img_clean) * 0.05
-                    img_noisy = img_clean + noise
-                    img_noisy = torch.clamp(img_noisy, 0., 1.)
-
                     optimizer.zero_grad()
-                    outputs = model(img_noisy) # Input is NOISY
-                    
-                    #loss = 80% SSIM + 20% L1
-                    loss_ssim = ssim_criterion(outputs, img_clean)
-                    loss_l1 = mse_criterion(outputs, img_clean)
-                    loss = (0.8 * loss_ssim) + (0.2 * loss_l1)
+
+                    if self.mode == "ssim":
+                        #denoising injection: add noise to input
+                        noise = torch.randn_like(img_clean) * 0.05
+                        img_noisy = img_clean + noise
+                        img_noisy = torch.clamp(img_noisy, 0., 1.)
+                        outputs = model(img_noisy)
+                        
+                        #loss = 80% SSIM + 20% L1
+                        loss_ssim = ssim_criterion(outputs, img_clean)
+                        loss_l1 = mse_criterion(outputs, img_clean)
+                        loss = (0.8 * loss_ssim) + (0.2 * loss_l1)
+                    else:
+                        #standard MSE baseline
+                        outputs = model(img_clean)
+                        loss = mse_criterion(outputs, img_clean)
                     
                     loss.backward()
                     optimizer.step()
@@ -162,14 +169,17 @@ class TrainingTask:
 
                 avg_loss = total_loss / len(dataset)
                 
+                #update UI
                 progress = int(((epoch + 1) / self.epochs) * 100)
-                msg = f"Epoch {epoch+1}/{self.epochs} - SSIM Loss: {avg_loss:.6f}"
+                msg = f"Epoch {epoch+1}/{self.epochs} - Loss: {avg_loss:.6f}"
                 logger.info(msg)
                 self.state.update(progress=progress, status=msg)
 
+            #export as ONNX format
             if not self.stop_event.is_set():
-                self.state.update(status="Exporting to ONNX...", progress=99)
-                self._export_onnx(model)
+                filename = f"autoencoder_{self.mode}.onnx"
+                self.state.update(status=f"Exporting to {filename}...", progress=99)
+                self._export_onnx(model, filename)
                 self.state.update(status="Training Complete", progress=100)
                 time.sleep(3)
 
@@ -180,9 +190,19 @@ class TrainingTask:
             if not self.state.get_snapshot()['mode'] == "ERROR":
                 self.state.set_mode("IDLE")
 
-    def _export_onnx(self, model):
+    #convert PyTorch model to ONNX for sentry loop
+    def _export_onnx(self, model, filename):
         settings.MODELS_DIR.mkdir(parents=True, exist_ok=True)
-        onnx_path = settings.MODELS_DIR / "autoencoder.onnx"
+        onnx_path = settings.MODELS_DIR / filename
         model.eval()
         dummy_input = torch.randn(1, 3, settings.AE_IMG_SIZE, settings.AE_IMG_SIZE).to(self.device)
-        torch.onnx.export(model, dummy_input, str(onnx_path), input_names=["input"], output_names=["output"], dynamic_axes={"input": {0: "batch"}, "output": {0: "batch"}}, opset_version=11)
+        torch.onnx.export(
+            model, 
+            dummy_input, 
+            str(onnx_path), 
+            input_names=["input"], 
+            output_names=["output"], 
+            dynamic_axes={"input": {0: "batch"}, "output": {0: "batch"}}, 
+            opset_version=11
+        )
+        logger.info(f"Model saved to {onnx_path}")
