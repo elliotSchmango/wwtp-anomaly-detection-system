@@ -22,8 +22,13 @@ class Settings(BaseSettings):
     
     #model Parameters
     AE_IMG_SIZE: int = 224
-    AE_THRESHOLD: float = 0.004
+    AE_THRESHOLD_MSE: float = 0.004
+    AE_THRESHOLD_SSIM: float = 0.35   #Has (1 - SSIM) score, needs tuning (0.3 - 0.5 is common)
     
+    #Google Gemini integration
+    USE_GEMINI: bool = False #switch to "True" if you want to use
+    GEMINI_API_KEY: str = "" #from .env
+
     #Azure integration
     IOTHUB_CONN_STRING: str = ""
 
