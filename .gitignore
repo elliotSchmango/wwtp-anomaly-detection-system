@@ -11,3 +11,5 @@ venv/
 # extra python artifacts:
 __pycache__/
 *.py[cod]
+
+.DS_Store
