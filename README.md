@@ -137,3 +137,36 @@ data/classifier_data/
 ```
 
 ---
+
+## Added Features
+
+### 1. Advanced Autoencoder Architecture (SSIM-Denoising)
+To improve anomaly detection in complex wastewater environments (moving water, steam, rust), the system now supports a "Novel" Autoencoder architecture.
+
+* **Core Innovation:** Replaces standard MSE (Mean Squared Error) with a **Hybrid Loss Function** combining **SSIM (Structural Similarity)** and **L1 Loss**.
+* **Denoising Strategy:** During training, Gaussian noise is injected into the input images, but the model is tasked with reconstructing the *clean* original. This forces the model to learn the *structure* of the facility rather than memorizing camera noise.
+* **Configuration:**
+    * Set `TRAINING_MODE="ssim"` in `config/settings.py` or your `.env` file to use this new architecture.
+    * Set `TRAINING_MODE="mse"` to revert to the baseline model.
+
+### 2. Quantitative Benchmarking Framework
+A scientific evaluation script (`benchmark_models.py`) is included to compare the performance of the Baseline (MSE) vs. Novel (SSIM) models.
+
+* **Metric:** Uses **AUROC (Area Under the Receiver Operating Characteristic curve)** to quantify separability between Normal and Anomaly data.
+* **Workflow:**
+    1.  Train both models separately (renaming the outputs to `autoencoder_mse.onnx` and `autoencoder_ssim.onnx`).
+    2.  Capture "Staged Anomalies" (e.g., foreign objects, obstructed pipes) in `data/test_anomalies/`.
+    3.  Run `python3 benchmark_models.py` to generate a comparative ROC Curve and calculate the performance gap.
+
+### 3. Edge-to-Cloud Integration (Gemini LLM)
+The system now features a hybrid inference mode that leverages Google's **Gemini 1.5 Pro** API for advanced context-aware classification.
+
+* **Role:** Acts as a "Level 2" investigator. When the local Autoencoder (Level 1) detects a visual anomaly, it pauses and delegates the analysis to the cloud.
+* **Process:**
+    1.  The system retrieves a "Reference Normal" image for the current zone.
+    2.  It sends both the **Reference** and the **Anomaly** frame to Gemini.
+    3.  Gemini analyzes the difference and classifies the specific threat (Fire, Smoke, Leak, Corrosion, etc.).
+* **Setup:**
+    * Get an API Key from Google AI Studio.
+    * Add `GEMINI_API_KEY=AIza...` to your `.env` file.
+    * Set `USE_GEMINI=True` in `config/settings.py` (or via the environment variable).
