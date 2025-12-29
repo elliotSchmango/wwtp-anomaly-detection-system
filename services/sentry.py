@@ -2,22 +2,24 @@ import time
 import cv2
 import logging
 from datetime import datetime
+from pathlib import Path
 from core.camera import CameraClient
 from core.inference import InferenceEngine
 from core.state import StateManager
+from core.llm import GeminiAgent
 from cloud.telemetry import TelemetrySender
 from config.settings import settings
 
-logger = logging.getLogger("State.Sentry")
+logger = logging.getLogger("Eagle.Sentry")
 
 class SentryLoop:
     def __init__(self, stop_event):
         self.stop_event = stop_event
         self.state = StateManager()
         self.telemetry = TelemetrySender()
+        self.llm = GeminiAgent() #initialize agent
         
     def run(self):
-        #initialize resources
         camera = CameraClient()
         if not camera.connect():
             self.state.update(status="Camera Connection Failed", mode="ERROR")
@@ -25,67 +27,86 @@ class SentryLoop:
 
         ai = InferenceEngine()
         
-        #sentry loop:
+        #determine mode & threshold
+        if settings.TRAINING_MODE == "ssim":
+            metric_label = "SSIM Loss"
+            current_threshold = settings.AE_THRESHOLD_SSIM
+        else:
+            metric_label = "MSE"
+            current_threshold = settings.AE_THRESHOLD_MSE
+
         try:
-            logger.info("Sentry Mode Started")
+            logger.info(f"Sentry Mode Started ({metric_label} Mode, Threshold: {current_threshold})")
+            
             while not self.stop_event.is_set():
                 
                 for zone in settings.ZONES:
                     if self.stop_event.is_set(): break
                     
-                    #1) move camera
+                    #1: move camera
                     self.state.update(current_zone=zone, status=f"Scanning Zone {zone}...")
                     camera.move_to_preset(zone)
                     
-                    #2) capture frame
-                    #wait to settle & grab fresh frame
+                    #2: get frame
+                    # Wait for movement to settle
                     time.sleep(0.5) 
                     frame = camera.get_frame()
                     
                     if frame is None:
                         logger.warning("Empty frame received")
                         continue
-                    
-                    self.state.update(latest_frame=frame) #update UI
 
-                    #run through AE model
-                    mse = ai.detect_anomaly(frame)
-                    is_anomaly = mse > settings.AE_THRESHOLD
+                    #update UI view
+                    self.state.update(latest_frame=frame)
+
+                    #3: inference
+                    anomaly_score = ai.detect_anomaly(frame) #returns anomaly score
+                    
+                    #check threshold dynamically
+                    is_anomaly = anomaly_score > current_threshold
                     
                     label = "Normal"
                     
                     if is_anomaly:
-                        #now classification if anomaly logic passes
-                        label, confidence = ai.classify_anomaly(frame)
+                        #4: classification
+                        if settings.USE_GEMINI:
+                            zone_dir = settings.DATA_DIR / f"zone_{zone}"
+                            #retrieve first jpg we find in the calibration folder to use as baseline
+                            ref_path = next(zone_dir.glob("*.jpg"), None)
+                            
+                            if ref_path:
+                                ref_frame = cv2.imread(str(ref_path))
+                                label = self.llm.analyze(ref_frame, frame)
+                            else:
+                                label = "No Reference Data"
+                        else: #otherwise, use local classifier
+                            label, confidence = ai.classify_anomaly(frame)
+
                         timestamp = datetime.now().isoformat()
-                        
-                        #alert
-                        log_msg = f"ALERT Zone {zone}: {label} ({confidence:.2f}) MSE: {mse:.5f}"
+                        log_msg = f"ALERT Zone {zone}: {label} ({metric_label}: {anomaly_score:.5f})"
                         logger.warning(log_msg)
                         
-                        #sending to azure
-                        self.telemetry.send_alert(zone, mse, label, timestamp)
+                        #upload to Azure
+                        self.telemetry.send_alert(zone, anomaly_score, label, timestamp)
                         
-                        #display UI updates
+                        #and update UI State
                         self.state.update(
                             is_anomaly=True, 
                             last_anomaly_label=label,
-                            last_anomaly_score=mse,
+                            last_anomaly_score=anomaly_score,
                             last_detection_time=timestamp,
                             log=log_msg
                         )
                         
-                        #save image locally to data/
+                        #save locally
                         snap_name = f"ALERT_{timestamp}_Z{zone}_{label}.jpg".replace(":", "-")
                         cv2.imwrite(str(settings.DATA_DIR / snap_name), frame)
                     
                     else:
                         self.state.update(
                             is_anomaly=False,
-                            status=f"Zone {zone} Clear (MSE {mse:.5f})"
+                            status=f"Zone {zone} Clear ({metric_label}: {anomaly_score:.5f})"
                         )
-
-                    #loop delay
                     time.sleep(1.0 / settings.SENTRY_FPS)
 
         except Exception as e:
@@ -96,6 +117,6 @@ class SentryLoop:
             self.telemetry.disconnect()
             logger.info("Sentry Mode Stopped")
             
-            #reset to "IDLE" ONLY if we weren't interrupted by another start command
+            # Reset to IDLE only if we weren't interrupted by another task start
             if self.stop_event.is_set():
                 self.state.set_mode("IDLE")
