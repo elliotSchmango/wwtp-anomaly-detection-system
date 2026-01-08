@@ -84,9 +84,15 @@ class ConvAutoencoder(nn.Module):
         return x
 
 #access dataset
+#access dataset
 class ZoneDataset(Dataset):
     def __init__(self, root_dir, transform=None):
-        self.image_paths = glob.glob(str(root_dir / "zone_*" / "*.jpg"))
+        # FIX: Look for both .jpg and .png files recursively
+        # We use a set to avoid duplicates if any weird overlap happens
+        jpgs = glob.glob(str(root_dir / "zone_*" / "*.jpg"), recursive=True)
+        pngs = glob.glob(str(root_dir / "zone_*" / "*.png"), recursive=True)
+        
+        self.image_paths = sorted(jpgs + pngs)
         self.transform = transform
         
     def __len__(self):
@@ -177,7 +183,7 @@ class TrainingTask:
 
             #export as ONNX format
             if not self.stop_event.is_set():
-                filename = f"autoencoder_{self.mode}.onnx"
+                filename = f"autoencoder.onnx"
                 self.state.update(status=f"Exporting to {filename}...", progress=99)
                 self._export_onnx(model, filename)
                 self.state.update(status="Training Complete", progress=100)

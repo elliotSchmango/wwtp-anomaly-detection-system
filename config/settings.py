@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     #sentry mode config
     SENTRY_FPS: int = 5
     # List of ONVIF preset indices to scan (saved on camera)
-    ZONES: list[int] = [1, 2, 3]  
+    ZONES: list[int] = [1, 2, 3, 4, 5] 
     
     #model Parameters
     AE_IMG_SIZE: int = 224

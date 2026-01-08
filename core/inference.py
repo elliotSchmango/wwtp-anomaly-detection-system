@@ -16,18 +16,19 @@ class InferenceEngine:
         #class labels
         self.class_names = ["Corrosion", "Fire", "Human", "Leaky Pipes"]
         
+        #Force CPU to avoid Mac CoreML crash (CoreMLExecutionProvider is unstable on some ONNX versions)
+        self.providers = ['CPUExecutionProvider']
+        
         self._load_models()
 
     def _load_models(self):
-        #check available hardware (cpu vs gpu)
-        providers = ort.get_available_providers()
-        logger.info(f"Inference Providers available: {providers}")
+        logger.info(f"Forcing Inference Providers: {self.providers}")
 
         #load AEs
         ae_path = settings.MODELS_DIR / "autoencoder.onnx"
         if ae_path.exists():
             try:
-                self.ae_sess = ort.InferenceSession(str(ae_path), providers=providers)
+                self.ae_sess = ort.InferenceSession(str(ae_path), providers=self.providers)
                 logger.info(f"Autoencoder loaded from {ae_path}")
             except Exception as e:
                 logger.error(f"Failed to load Autoencoder: {e}")
@@ -38,7 +39,7 @@ class InferenceEngine:
         clf_path = settings.MODELS_DIR / "classifier.onnx"
         if clf_path.exists():
             try:
-                self.clf_sess = ort.InferenceSession(str(clf_path), providers=providers)
+                self.clf_sess = ort.InferenceSession(str(clf_path), providers=self.providers)
                 logger.info(f"Classifier loaded from {clf_path}")
             except Exception as e:
                 logger.error(f"Failed to load Classifier: {e}")
