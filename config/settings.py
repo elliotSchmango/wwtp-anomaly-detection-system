@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     
     #sentry mode config
     SENTRY_FPS: int = 5
+    # Telemetry interval (seconds) for periodic sentry pushes
+    SENTRY_TELEMETRY_INTERVAL_SEC: int = 900
     # List of ONVIF preset indices to scan (saved on camera)
     ZONES: list[int] = [1, 2, 3, 4, 5] 
     
@@ -31,6 +33,10 @@ class Settings(BaseSettings):
 
     #Azure integration
     IOTHUB_CONN_STRING: str = ""
+    DEVICE_ID: str = "test-site"
+    TELEMETRY_IMAGE_FORMAT: str = "jpg"
+    TELEMETRY_IMAGE_QUALITY: int = 70
+    TELEMETRY_IMAGE_MAX_WIDTH: int = 640
 
     #"ssim" ("Novel") or "mse" (Baseline)
     TRAINING_MODE: str = "ssim"
