@@ -1,4 +1,5 @@
 import time
+import base64
 import cv2
 import logging
 from datetime import datetime
@@ -18,6 +19,32 @@ class SentryLoop:
         self.state = StateManager()
         self.telemetry = TelemetrySender()
         self.llm = GeminiAgent() #initialize agent
+
+    def _encode_frame(self, frame):
+        fmt = settings.TELEMETRY_IMAGE_FORMAT.lower()
+        if fmt not in ("jpg", "jpeg", "png"):
+            fmt = "jpg"
+
+        resized = frame
+        max_width = settings.TELEMETRY_IMAGE_MAX_WIDTH
+        if max_width and frame.shape[1] > max_width:
+            scale = max_width / frame.shape[1]
+            new_size = (max_width, int(frame.shape[0] * scale))
+            resized = cv2.resize(frame, new_size, interpolation=cv2.INTER_AREA)
+
+        ext = ".jpg" if fmt in ("jpg", "jpeg") else ".png"
+        params = []
+        if ext == ".jpg":
+            params = [cv2.IMWRITE_JPEG_QUALITY, settings.TELEMETRY_IMAGE_QUALITY]
+
+        ok, buffer = cv2.imencode(ext, resized, params)
+        if not ok:
+            return None
+
+        return {
+            "format": fmt,
+            "data_b64": base64.b64encode(buffer).decode("ascii")
+        }
         
     def run(self):
         camera = CameraClient()
@@ -37,6 +64,7 @@ class SentryLoop:
 
         try:
             logger.info(f"Sentry Mode Started ({metric_label} Mode, Threshold: {current_threshold})")
+            last_push_by_zone = {zone: datetime.min for zone in settings.ZONES}
             
             while not self.stop_event.is_set():
                 
@@ -66,6 +94,9 @@ class SentryLoop:
                     is_anomaly = anomaly_score > current_threshold
                     
                     label = "Normal"
+                    llm_output = "LLM Skipped"
+                    llm_text_input = self.llm.get_prompt()
+                    ref_frame = None
                     
                     if is_anomaly:
                         #4: classification
@@ -76,18 +107,38 @@ class SentryLoop:
                             
                             if ref_path:
                                 ref_frame = cv2.imread(str(ref_path))
-                                label = self.llm.analyze(ref_frame, frame)
+                                llm_output = self.llm.analyze(ref_frame, frame)
+                                label = llm_output
                             else:
-                                label = "No Reference Data"
+                                llm_output = "No Reference Data"
+                                label = llm_output
                         else: #otherwise, use local classifier
                             label, confidence = ai.classify_anomaly(frame)
+                            llm_output = "LLM Disabled"
 
                         timestamp = datetime.now().isoformat()
                         log_msg = f"ALERT Zone {zone}: {label} ({metric_label}: {anomaly_score:.5f})"
                         logger.warning(log_msg)
                         
                         #upload to Azure
-                        self.telemetry.send_alert(zone, anomaly_score, label, timestamp)
+                        encoded_current = self._encode_frame(frame)
+                        encoded_ref = self._encode_frame(ref_frame) if ref_frame is not None else None
+                        payload = {
+                            "timestamp": timestamp,
+                            "device_id": settings.DEVICE_ID,
+                            "zone_id": zone,
+                            "anomaly_metric": settings.TRAINING_MODE,
+                            "anomaly_score": round(anomaly_score, 6),
+                            "anomaly_flag": True,
+                            "classifier_label": label,
+                            "frame": encoded_current,
+                            "llm_base_frame": encoded_ref,
+                            "llm_current_frame": encoded_current,
+                            "llm_text_input": llm_text_input,
+                            "llm_output": llm_output
+                        }
+                        self.telemetry.send_payload(payload)
+                        last_push_by_zone[zone] = datetime.now()
                         
                         #and update UI State
                         self.state.update(
@@ -107,6 +158,34 @@ class SentryLoop:
                             is_anomaly=False,
                             status=f"Zone {zone} Clear ({metric_label}: {anomaly_score:.5f})"
                         )
+
+                    now = datetime.now()
+                    elapsed_sec = (now - last_push_by_zone[zone]).total_seconds()
+                    if elapsed_sec >= settings.SENTRY_TELEMETRY_INTERVAL_SEC:
+                        ref_frame = None
+                        zone_dir = settings.DATA_DIR / f"zone_{zone}"
+                        ref_path = next(zone_dir.glob("*.jpg"), None)
+                        if ref_path:
+                            ref_frame = cv2.imread(str(ref_path))
+
+                        encoded_current = self._encode_frame(frame)
+                        encoded_ref = self._encode_frame(ref_frame) if ref_frame is not None else None
+                        payload = {
+                            "timestamp": now.isoformat(),
+                            "device_id": settings.DEVICE_ID,
+                            "zone_id": zone,
+                            "anomaly_metric": settings.TRAINING_MODE,
+                            "anomaly_score": round(anomaly_score, 6),
+                            "anomaly_flag": is_anomaly,
+                            "classifier_label": label,
+                            "frame": encoded_current,
+                            "llm_base_frame": encoded_ref,
+                            "llm_current_frame": encoded_current,
+                            "llm_text_input": llm_text_input,
+                            "llm_output": llm_output
+                        }
+                        self.telemetry.send_payload(payload)
+                        last_push_by_zone[zone] = now
                     time.sleep(1.0 / settings.SENTRY_FPS)
 
         except Exception as e:

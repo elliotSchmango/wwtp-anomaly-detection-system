@@ -71,18 +71,9 @@ class TelemetrySender:
                 self.enabled = False
 
     #Public API: attempt to send immediately, queue on failure
-    def send_alert(self, zone_id, mse, label, timestamp):
+    def send_payload(self, payload: dict):
         if not self.enabled:
             return
-
-        payload = {
-            "timestamp": timestamp,
-            "device_id": "test-site",
-            "zone_id": zone_id,
-            "mse": round(mse, 6),
-            "label": label,
-            "alert": True
-        }
         
         if not self._send_to_hub(payload):
             self.logger.warning("Connection unstable. Buffering alert to disk.")
@@ -96,7 +87,7 @@ class TelemetrySender:
             msg = Message(json.dumps(payload))
             msg.content_type = "application/json"
             msg.content_encoding = "utf-8"
-            msg.custom_properties["is_anomaly"] = "true"
+            msg.custom_properties["is_anomaly"] = "true" if payload.get("anomaly_flag") else "false"
             
             self.client.send_message(msg)
             return True

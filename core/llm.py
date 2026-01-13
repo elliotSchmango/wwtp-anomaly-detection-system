@@ -7,6 +7,27 @@ from config.settings import settings
 logger = logging.getLogger("Eagle.LLM")
 
 class GeminiAgent:
+    prompt_template = """
+    You are an industrial safety AI for a Wastewater Treatment Plant.
+    
+    Image 1: REFERENCE (Normal conditions)
+    Image 2: EVENT (Anomaly detected)
+
+    Compare the EVENT image to the REFERENCE. Identify exactly what foreign object or condition has appeared.
+    
+    Classify the anomaly into EXACTLY one of these categories:
+    - Fire
+    - Smoke
+    - Water Leak
+    - Chemical Spill
+    - Corrosion
+    - Human
+    - Foreign Object
+    - Unknown
+    
+    Return ONLY the category name. Do not explain.
+    """
+
     def __init__(self):
         if settings.GEMINI_API_KEY:
             genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -15,6 +36,9 @@ class GeminiAgent:
             logger.info("Gemini Agent Initialized")
         else:
             logger.warning("Gemini API Key missing! LLM features will fail.")
+
+    def get_prompt(self) -> str:
+        return self.prompt_template.strip()
 
     def analyze(self, normal_frame, anomaly_frame):
         """
@@ -31,26 +55,7 @@ class GeminiAgent:
             img_normal = Image.fromarray(cv2.cvtColor(normal_frame, cv2.COLOR_BGR2RGB))
             img_anomaly = Image.fromarray(cv2.cvtColor(anomaly_frame, cv2.COLOR_BGR2RGB))
 
-            prompt = """
-            You are an industrial safety AI for a Wastewater Treatment Plant.
-            
-            Image 1: REFERENCE (Normal conditions)
-            Image 2: EVENT (Anomaly detected)
-
-            Compare the EVENT image to the REFERENCE. Identify exactly what foreign object or condition has appeared.
-            
-            Classify the anomaly into EXACTLY one of these categories:
-            - Fire
-            - Smoke
-            - Water Leak
-            - Chemical Spill
-            - Corrosion
-            - Human
-            - Foreign Object
-            - Unknown
-            
-            Return ONLY the category name. Do not explain.
-            """
+            prompt = self.get_prompt()
 
             logger.info("Sending frames to Gemini for analysis...")
             
