@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from pydantic_settings import BaseSettings
 
@@ -31,7 +30,7 @@ class Settings(BaseSettings):
     USE_GEMINI: bool = False #switch to "True" if you want to use
     GEMINI_API_KEY: str = "" #from .env
 
-    #Azure integration
+    #Azure integration (empty string disables IoT Hub telemetry)
     IOTHUB_CONN_STRING: str = ""
     DEVICE_ID: str = "test-site"
     TELEMETRY_IMAGE_FORMAT: str = "jpg"
