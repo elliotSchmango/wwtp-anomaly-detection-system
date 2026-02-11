@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # Telemetry interval (seconds) for periodic sentry pushes
     SENTRY_TELEMETRY_INTERVAL_SEC: int = 900
     # List of ONVIF preset indices to scan (saved on camera)
-    ZONES: list[int] = [1, 2, 3, 4, 5] 
+    ZONES: list[int] = [1, 2, 3] 
     
     #model Parameters
     AE_IMG_SIZE: int = 224
