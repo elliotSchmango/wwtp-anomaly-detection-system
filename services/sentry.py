@@ -64,8 +64,6 @@ class SentryLoop:
 
         try:
             logger.info(f"Sentry Mode Started ({metric_label} Mode, Threshold: {current_threshold})")
-            last_push_by_zone = {zone: datetime.min for zone in settings.ZONES}
-            
             while not self.stop_event.is_set():
                 
                 for zone in settings.ZONES:
@@ -138,7 +136,6 @@ class SentryLoop:
                             "llm_output": llm_output
                         }
                         self.telemetry.send_payload(payload)
-                        last_push_by_zone[zone] = datetime.now()
                         
                         #and update UI State
                         self.state.update(
@@ -159,33 +156,6 @@ class SentryLoop:
                             status=f"Zone {zone} Clear ({metric_label}: {anomaly_score:.5f})"
                         )
 
-                    now = datetime.now()
-                    elapsed_sec = (now - last_push_by_zone[zone]).total_seconds()
-                    if elapsed_sec >= settings.SENTRY_TELEMETRY_INTERVAL_SEC:
-                        ref_frame = None
-                        zone_dir = settings.DATA_DIR / f"zone_{zone}"
-                        ref_path = next(zone_dir.glob("*.jpg"), None)
-                        if ref_path:
-                            ref_frame = cv2.imread(str(ref_path))
-
-                        encoded_current = self._encode_frame(frame)
-                        encoded_ref = self._encode_frame(ref_frame) if ref_frame is not None else None
-                        payload = {
-                            "timestamp": now.isoformat(),
-                            "device_id": settings.DEVICE_ID,
-                            "zone_id": zone,
-                            "anomaly_metric": settings.TRAINING_MODE,
-                            "anomaly_score": round(anomaly_score, 6),
-                            "anomaly_flag": is_anomaly,
-                            "classifier_label": label,
-                            "frame": encoded_current,
-                            "llm_base_frame": encoded_ref,
-                            "llm_current_frame": encoded_current,
-                            "llm_text_input": llm_text_input,
-                            "llm_output": llm_output
-                        }
-                        self.telemetry.send_payload(payload)
-                        last_push_by_zone[zone] = now
                     time.sleep(1.0 / settings.SENTRY_FPS)
 
         except Exception as e:

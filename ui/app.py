@@ -1,6 +1,7 @@
 import streamlit as st
 import cv2
 import time
+import shutil
 from core.state import StateManager
 from services.manager import ServiceManager
 from config.settings import settings
@@ -17,6 +18,23 @@ st.set_page_config(
 state_mgr = StateManager()
 svc_mgr = ServiceManager()
 
+def _delete_zone_data():
+    removed = 0
+    for zone_dir in settings.DATA_DIR.glob("zone_*"):
+        if zone_dir.is_dir():
+            shutil.rmtree(zone_dir, ignore_errors=True)
+            removed += 1
+    return removed
+
+def _delete_model_data():
+    removed = 0
+    if settings.MODELS_DIR.exists():
+        for path in settings.MODELS_DIR.iterdir():
+            if path.is_file():
+                path.unlink()
+                removed += 1
+    return removed
+
 #sidebar
 with st.sidebar:
     st.title("Control Panel")
@@ -30,7 +48,7 @@ with st.sidebar:
     
     #sentry toggle
     is_sentry_active = (snapshot['mode'] == "SENTRY")
-    toggle_sentry = st.toggle("Active Sentry Mode", value=is_sentry_active)
+    toggle_sentry = st.toggle("Activate Sentry Mode", value=is_sentry_active)
     
     if toggle_sentry and not is_sentry_active:
         svc_mgr.start_sentry()
@@ -56,6 +74,36 @@ with st.sidebar:
     if st.button("Train Classifier", disabled=is_sentry_active, width="stretch"):
         svc_mgr.start_classifier_training()
         st.rerun()
+
+    confirm_zone_wipe = st.checkbox(
+        "Confirm zone data wipe",
+        key="confirm_zone_wipe",
+        disabled=is_sentry_active
+    )
+    if st.button(
+        "Wipe Zone Data",
+        disabled=is_sentry_active or not confirm_zone_wipe,
+        width="stretch"
+    ):
+        removed = _delete_zone_data()
+        state_mgr.update(log=f"Wiped zone data (removed {removed} zone folder(s)).")
+        st.session_state["confirm_zone_wipe"] = False
+        st.rerun()
+
+    confirm_model_wipe = st.checkbox(
+        "Confirm model data wipe",
+        key="confirm_model_wipe",
+        disabled=is_sentry_active
+    )
+    if st.button(
+        "Wipe Model Data",
+        disabled=is_sentry_active or not confirm_model_wipe,
+        width="stretch"
+    ):
+        removed = _delete_model_data()
+        state_mgr.update(log=f"Wiped model data (removed {removed} file(s)).")
+        st.session_state["confirm_model_wipe"] = False
+        st.rerun()
             
     if st.button("STOP ALL TASKS", type="primary", width="stretch"):
         svc_mgr.stop_active()
@@ -79,6 +127,9 @@ with col_main:
 
 with col_stats:
     st.subheader("Telemetry")
+
+    score_mode = settings.TRAINING_MODE.lower()
+    current_score_label = "Current SSIM" if score_mode == "ssim" else "Current MSE"
     
     #alerty if anomaly detected
     if snapshot['is_anomaly']:
@@ -86,7 +137,7 @@ with col_stats:
         st.metric("Confidence Score (MSE)", f"{snapshot['last_anomaly_score']:.5f}")
     else:
         st.success("System Normal")
-        st.metric("Current MSE", f"{snapshot['last_anomaly_score']:.5f}")
+        st.metric(current_score_label, f"{snapshot['last_anomaly_score']:.5f}")
 
     st.divider()
     

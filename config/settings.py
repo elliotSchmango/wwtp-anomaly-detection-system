@@ -16,18 +16,16 @@ class Settings(BaseSettings):
     
     #sentry mode config
     SENTRY_FPS: int = 5
-    # Telemetry interval (seconds) for periodic sentry pushes
-    SENTRY_TELEMETRY_INTERVAL_SEC: int = 900
     # List of ONVIF preset indices to scan (saved on camera)
-    ZONES: list[int] = [1, 2, 3] 
+    ZONES: list[int] = [1]
     
     #model Parameters
     AE_IMG_SIZE: int = 224
     AE_THRESHOLD_MSE: float = 0.004
-    AE_THRESHOLD_SSIM: float = 0.35   #Has (1 - SSIM) score, needs tuning (0.3 - 0.5 is common)
+    AE_THRESHOLD_SSIM: float = 0.1   #Has (1 - SSIM) score. edit as needed
     
     #Google Gemini integration
-    USE_GEMINI: bool = False #switch to "True" if you want to use
+    USE_GEMINI: bool = True #switch to "True" if you want to use, "False" if you don't want to use Gemini
     GEMINI_API_KEY: str = "" #from .env
 
     #Azure integration (empty string disables IoT Hub telemetry)
