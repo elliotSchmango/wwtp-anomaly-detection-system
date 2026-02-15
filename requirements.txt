@@ -232,3 +232,7 @@ websocket-client==1.3.3
 wrapt==2.0.1
 xmltodict==0.15.1
 zeep==4.3.2
+twilio
+azure-storage-blob
+pydantic
+pydantic-settings
