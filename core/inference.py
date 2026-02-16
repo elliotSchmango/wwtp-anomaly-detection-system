@@ -3,6 +3,7 @@ import numpy as np
 import onnxruntime as ort
 import logging
 from pathlib import Path
+from skimage.metrics import structural_similarity as ssim
 from config.settings import settings
 
 #setup logger
@@ -80,7 +81,9 @@ class InferenceEngine:
 
     def detect_anomaly(self, frame) -> float:
         """
-        Runs Autoencoder and returns Mean Squared Error (MSE).
+        Runs Autoencoder and returns anomaly score.
+        - MSE when TRAINING_MODE != "ssim"
+        - (1 - SSIM) when TRAINING_MODE == "ssim"
         Returns 0.0 if model is not loaded.
         """
         if self.ae_sess is None:
@@ -93,7 +96,20 @@ class InferenceEngine:
             #inference
             reconstruction = self.ae_sess.run(None, {input_name: x})[0]
             
-            #compute mean squared error
+            #compute anomaly score
+            if settings.TRAINING_MODE == "ssim":
+                # SSIM expects HWC; convert from NCHW and compute 1 - SSIM
+                x_img = np.transpose(x[0], (1, 2, 0))
+                recon_img = np.transpose(reconstruction[0], (1, 2, 0))
+                score = 1.0 - ssim(
+                    x_img,
+                    recon_img,
+                    channel_axis=2,
+                    data_range=1.0
+                )
+                return float(score)
+
+            #default: mean squared error
             mse = np.mean((x - reconstruction) ** 2)
             return float(mse)
         except Exception as e:

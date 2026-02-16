@@ -130,6 +130,9 @@ with col_stats:
 
     score_mode = settings.TRAINING_MODE.lower()
     current_score_label = "Current SSIM" if score_mode == "ssim" else "Current MSE"
+    current_threshold = (
+        settings.AE_THRESHOLD_SSIM if score_mode == "ssim" else settings.AE_THRESHOLD_MSE
+    )
     
     #alerty if anomaly detected
     if snapshot['is_anomaly']:
@@ -138,6 +141,7 @@ with col_stats:
     else:
         st.success("System Normal")
         st.metric(current_score_label, f"{snapshot['last_anomaly_score']:.5f}")
+        st.caption(f"Threshold: {current_threshold:.5f}")
 
     st.divider()
     
