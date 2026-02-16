@@ -35,6 +35,18 @@ def _delete_model_data():
                 removed += 1
     return removed
 
+def _wipe_zone_data():
+    removed = _delete_zone_data()
+    state_mgr.update(log=f"Wiped zone data (removed {removed} zone folder(s)).")
+    st.session_state["confirm_zone_wipe"] = False
+    st.rerun()
+
+def _wipe_model_data():
+    removed = _delete_model_data()
+    state_mgr.update(log=f"Wiped model data (removed {removed} file(s)).")
+    st.session_state["confirm_model_wipe"] = False
+    st.rerun()
+
 #sidebar
 with st.sidebar:
     st.title("Control Panel")
@@ -80,30 +92,24 @@ with st.sidebar:
         key="confirm_zone_wipe",
         disabled=is_sentry_active
     )
-    if st.button(
+    st.button(
         "Wipe Zone Data",
         disabled=is_sentry_active or not confirm_zone_wipe,
-        width="stretch"
-    ):
-        removed = _delete_zone_data()
-        state_mgr.update(log=f"Wiped zone data (removed {removed} zone folder(s)).")
-        st.session_state["confirm_zone_wipe"] = False
-        st.rerun()
+        width="stretch",
+        on_click=_wipe_zone_data
+    )
 
     confirm_model_wipe = st.checkbox(
         "Confirm model data wipe",
         key="confirm_model_wipe",
         disabled=is_sentry_active
     )
-    if st.button(
+    st.button(
         "Wipe Model Data",
         disabled=is_sentry_active or not confirm_model_wipe,
-        width="stretch"
-    ):
-        removed = _delete_model_data()
-        state_mgr.update(log=f"Wiped model data (removed {removed} file(s)).")
-        st.session_state["confirm_model_wipe"] = False
-        st.rerun()
+        width="stretch",
+        on_click=_wipe_model_data
+    )
             
     if st.button("STOP ALL TASKS", type="primary", width="stretch"):
         svc_mgr.stop_active()
