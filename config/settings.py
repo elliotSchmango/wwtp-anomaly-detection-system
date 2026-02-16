@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     ONVIF_PORT: int = 2020
     
     #sentry mode config
-    SENTRY_FPS: int = 5
+    SENTRY_FPS: int = 1
     # List of ONVIF preset indices to scan (saved on camera)
     ZONES: list[int] = [1]
     

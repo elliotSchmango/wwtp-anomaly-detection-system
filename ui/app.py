@@ -137,7 +137,7 @@ with col_stats:
     #alerty if anomaly detected
     if snapshot['is_anomaly']:
         st.error(f"ANOMALY DETECTED: {snapshot['last_anomaly_label']}")
-        st.metric("Confidence Score (MSE)", f"{snapshot['last_anomaly_score']:.5f}")
+        st.metric(f"Confidence Score ({current_score_label.split()[-1]})", f"{snapshot['last_anomaly_score']:.5f}")
     else:
         st.success("System Normal")
         st.metric(current_score_label, f"{snapshot['last_anomaly_score']:.5f}")
