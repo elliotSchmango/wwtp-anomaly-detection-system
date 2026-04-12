@@ -53,9 +53,17 @@ class SentryLoop:
             return
 
         ai = InferenceEngine()
-        
+
+        #precompute calibration latent centroids for FUSED L component (no-op if latent not exported)
+        if settings.TRAINING_MODE == "fused":
+            for z in settings.ZONES:
+                ai.precompute_reference_latents(z, settings.DATA_DIR / f"zone_{z}")
+
         #determine mode & threshold
-        if settings.TRAINING_MODE == "ssim":
+        if settings.TRAINING_MODE == "fused":
+            metric_label = "FUSED"
+            current_threshold = settings.AE_THRESHOLD_FUSED
+        elif settings.TRAINING_MODE == "ssim":
             metric_label = "SSIM Loss"
             current_threshold = settings.AE_THRESHOLD_SSIM
         else:
@@ -86,7 +94,11 @@ class SentryLoop:
                     self.state.update(latest_frame=frame)
 
                     #3: inference
-                    anomaly_score = ai.detect_anomaly(frame) #returns anomaly score
+                    if settings.TRAINING_MODE == "fused":
+                        anomaly_score, fused_components = ai.detect_anomaly_fused(frame, zone_id=zone)
+                    else:
+                        anomaly_score = ai.detect_anomaly(frame, zone_id=zone)
+                        fused_components = {}
                     
                     #check threshold dynamically
                     is_anomaly = anomaly_score > current_threshold
@@ -115,7 +127,17 @@ class SentryLoop:
                             llm_output = "LLM Disabled"
 
                         timestamp = datetime.now().isoformat()
-                        log_msg = f"ALERT Zone {zone}: {label} ({metric_label}: {anomaly_score:.5f})"
+                        if fused_components:
+                            log_msg = (
+                                f"ALERT Zone {zone}: {label} "
+                                f"(FUSED:{anomaly_score:.4f} "
+                                f"S:{fused_components.get('S',0):.4f} "
+                                f"G:{fused_components.get('G',0):.4f} "
+                                f"F:{fused_components.get('F',0):.4f} "
+                                f"L:{fused_components.get('L',0):.4f})"
+                            )
+                        else:
+                            log_msg = f"ALERT Zone {zone}: {label} ({metric_label}: {anomaly_score:.5f})"
                         logger.warning(log_msg)
                         
                         #upload to Azure
@@ -151,9 +173,20 @@ class SentryLoop:
                         cv2.imwrite(str(settings.DATA_DIR / snap_name), frame)
                     
                     else:
+                        if fused_components:
+                            clear_msg = (
+                                f"Zone {zone} Clear "
+                                f"(FUSED:{anomaly_score:.4f} "
+                                f"S:{fused_components.get('S',0):.4f} "
+                                f"G:{fused_components.get('G',0):.4f} "
+                                f"F:{fused_components.get('F',0):.4f} "
+                                f"L:{fused_components.get('L',0):.4f})"
+                            )
+                        else:
+                            clear_msg = f"Zone {zone} Clear ({metric_label}: {anomaly_score:.5f})"
                         self.state.update(
                             is_anomaly=False,
-                            status=f"Zone {zone} Clear ({metric_label}: {anomaly_score:.5f})"
+                            status=clear_msg
                         )
 
                     time.sleep(1.0 / settings.SENTRY_FPS)

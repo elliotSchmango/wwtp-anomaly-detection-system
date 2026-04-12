@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     #model Parameters
     AE_IMG_SIZE: int = 224
     AE_THRESHOLD_MSE: float = 0.004
-    AE_THRESHOLD_SSIM: float = 0.05   #Has (1 - SSIM) score. edit as needed
+    AE_THRESHOLD_SSIM: float = 0.05   #has (1 - SSIM) score. edit as needed
+    AE_THRESHOLD_FUSED: float = 0.15  #normalized composite score, tune after calibration
     
     #Google Gemini integration
     USE_GEMINI: bool = True #switch to "True" if you want to use, "False" if you don't want to use Gemini
@@ -35,8 +36,8 @@ class Settings(BaseSettings):
     TELEMETRY_IMAGE_QUALITY: int = 70
     TELEMETRY_IMAGE_MAX_WIDTH: int = 640
 
-    #"ssim" ("Novel") or "mse" (Baseline)
-    TRAINING_MODE: str = "ssim"
+    #"fused" (SSIM+Gradient+FFT+Latent), "ssim" (SSIM+L1 denoising), or "mse" (baseline)
+    TRAINING_MODE: str = "fused"
     
     class Config:
         env_file = ".env"
