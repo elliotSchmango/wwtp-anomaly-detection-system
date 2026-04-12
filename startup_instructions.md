@@ -503,3 +503,51 @@ sed -i 's/numpy==2.4.0/numpy==2.2.3/g' requirements.txt
 ```
 
 ---
+
+# 10. FUSED Anomaly Metric
+
+FUSED is the default anomaly scoring method. It is a weighted composite of four visual signals that each detect a different class of anomaly.
+
+| Component | Weight | What It Detects |
+|---|---|---|
+| **S** — SSIM Residual | 30% | Structural and brightness changes |
+| **G** — Gradient Divergence | 25% | Hard edges, silhouettes, fallen objects |
+| **F** — FFT Energy Shift | 25% | Surface texture changes, corrosion, fouling |
+| **L** — Latent Cosine Distance | 20% | Semantic scene deviation (requires retrain) |
+
+## Activating FUSED
+
+FUSED is enabled by default (`TRAINING_MODE=fused` in `.env`).
+
+No additional configuration is required. Components S, G, and F are active immediately on any existing model.
+
+## Threshold Tuning
+
+The default threshold is `0.15`. Adjust in `.env`:
+
+```
+AE_THRESHOLD_FUSED=0.12
+```
+
+Run Sentry Mode for several minutes on normal conditions and observe the FUSED scores in the dashboard status bar. Set your threshold slightly above the highest normal score you observe.
+
+⚠ **Do not rebuild after changing the threshold.** Editing `.env` is sufficient — restart with:
+
+```bash
+docker-compose up
+```
+
+## Enabling the L Component (Latent Cosine Distance)
+
+The L component requires the model to be retrained with `TRAINING_MODE=fused`. Existing models trained on `mse` or `ssim` will silently skip L (its weight drops to zero automatically).
+
+To enable it:
+
+1. Run **Calibrate** from the dashboard to collect normal frames.
+2. Set `TRAINING_MODE=fused` in `.env`.
+3. Run **Train** from the dashboard.
+4. Restart Sentry Mode.
+
+After retraining, the system will automatically compute a reference latent vector from your calibration images at startup and enable the L component.
+
+---

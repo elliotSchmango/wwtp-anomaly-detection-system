@@ -63,6 +63,29 @@ class SSIMLoss(nn.Module):
             
         return 1 - self._ssim(img1, img2, window, self.window_size, channel, self.size_average)
 
+#gradient edge-consistency loss using Sobel kernels
+class GradientLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        #3x3 Sobel kernels stored as buffers so they move with the model device
+        kx = torch.tensor([[-1,0,1],[-2,0,2],[-1,0,1]], dtype=torch.float32).view(1,1,3,3)
+        ky = kx.permute(0,1,3,2).contiguous()
+        self.register_buffer('kx', kx)
+        self.register_buffer('ky', ky)
+
+    def forward(self, pred, target):
+        #collapse to single-channel grayscale before Sobel
+        pred_gray = pred.mean(dim=1, keepdim=True)
+        tgt_gray = target.mean(dim=1, keepdim=True)
+        gx_pred = F.conv2d(pred_gray, self.kx, padding=1)
+        gy_pred = F.conv2d(pred_gray, self.ky, padding=1)
+        gx_tgt = F.conv2d(tgt_gray, self.kx, padding=1)
+        gy_tgt = F.conv2d(tgt_gray, self.ky, padding=1)
+        #compare gradient magnitudes
+        mag_pred = torch.sqrt(gx_pred**2 + gy_pred**2 + 1e-8)
+        mag_tgt = torch.sqrt(gx_tgt**2 + gy_tgt**2 + 1e-8)
+        return F.l1_loss(mag_pred, mag_tgt)
+
 #standard AE architecture
 class ConvAutoencoder(nn.Module):
     def __init__(self):
@@ -138,7 +161,9 @@ class TrainingTask:
             
             #metric definitions
             mse_criterion = nn.MSELoss() if self.mode == "mse" else nn.L1Loss()
+            l1_criterion = nn.L1Loss()
             ssim_criterion = SSIMLoss().to(self.device)
+            grad_criterion = GradientLoss().to(self.device)
             optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
             #training loop
@@ -152,13 +177,22 @@ class TrainingTask:
                     
                     optimizer.zero_grad()
 
-                    if self.mode == "ssim":
+                    if self.mode == "fused":
+                        #denoising + gradient-aware hybrid loss
+                        noise = torch.randn_like(img_clean) * 0.05
+                        img_noisy = torch.clamp(img_clean + noise, 0., 1.)
+                        outputs = model(img_noisy)
+                        #loss = 60% SSIM + 20% L1 + 20% gradient edge consistency
+                        loss_ssim = ssim_criterion(outputs, img_clean)
+                        loss_l1 = l1_criterion(outputs, img_clean)
+                        loss_grad = grad_criterion(outputs, img_clean)
+                        loss = (0.60 * loss_ssim) + (0.20 * loss_l1) + (0.20 * loss_grad)
+                    elif self.mode == "ssim":
                         #denoising injection: add noise to input
                         noise = torch.randn_like(img_clean) * 0.05
                         img_noisy = img_clean + noise
                         img_noisy = torch.clamp(img_noisy, 0., 1.)
                         outputs = model(img_noisy)
-                        
                         #loss = 80% SSIM + 20% L1
                         loss_ssim = ssim_criterion(outputs, img_clean)
                         loss_l1 = mse_criterion(outputs, img_clean)
@@ -202,13 +236,31 @@ class TrainingTask:
         onnx_path = settings.MODELS_DIR / filename
         model.eval()
         dummy_input = torch.randn(1, 3, settings.AE_IMG_SIZE, settings.AE_IMG_SIZE).to(self.device)
+
+        #thin wrapper to expose encoder bottleneck as a second ONNX output
+        #enables the L (latent cosine distance) component of FUSED scoring
+        class AEWithLatent(nn.Module):
+            def __init__(self, ae):
+                super().__init__()
+                self.ae = ae
+            def forward(self, x):
+                z = self.ae.encoder(x)
+                out = self.ae.decoder(z)
+                #flatten spatial dims so latent is a 1D vector per sample
+                return out, z.flatten(1)
+
+        wrapped = AEWithLatent(model).to(self.device)
         torch.onnx.export(
-            model, 
-            dummy_input, 
-            str(onnx_path), 
-            input_names=["input"], 
-            output_names=["output"], 
-            dynamic_axes={"input": {0: "batch"}, "output": {0: "batch"}}, 
+            wrapped,
+            dummy_input,
+            str(onnx_path),
+            input_names=["input"],
+            output_names=["output", "latent"],
+            dynamic_axes={
+                "input":  {0: "batch"},
+                "output": {0: "batch"},
+                "latent": {0: "batch"},
+            },
             opset_version=11
         )
-        logger.info(f"Model saved to {onnx_path}")
+        logger.info(f"Model saved to {onnx_path} (outputs: output + latent)")
