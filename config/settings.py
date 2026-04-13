@@ -16,8 +16,14 @@ class Settings(BaseSettings):
     
     #sentry mode config
     SENTRY_FPS: int = 1
-    # List of ONVIF preset indices to scan (saved on camera)
+    #list of ONVIF preset indices to scan (saved on camera)
     ZONES: list[int] = [1]
+    #rolling window size for temporal consistency check
+    TEMPORAL_WINDOW: int = 5
+    #minimum anomaly hits within window required to fire an alert
+    TEMPORAL_MIN_HITS: int = 3
+    #classifier confidence above which Gemini is skipped (cost saving)
+    CLASSIFIER_CONFIDENCE_GATE: float = 0.85
     
     #model Parameters
     AE_IMG_SIZE: int = 224
