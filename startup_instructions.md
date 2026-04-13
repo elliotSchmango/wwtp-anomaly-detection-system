@@ -523,18 +523,18 @@ No additional configuration is required. Components S, G, and F are active immed
 
 ## Threshold Tuning
 
-The default threshold is `0.15`. Adjust in `.env`:
+The default threshold is `0.15`. Adjust in `config/settings.py`:
 
-```
-AE_THRESHOLD_FUSED=0.12
+```python
+AE_THRESHOLD_FUSED: float = 0.12
 ```
 
 Run Sentry Mode for several minutes on normal conditions and observe the FUSED scores in the dashboard status bar. Set your threshold slightly above the highest normal score you observe.
 
-⚠ **Do not rebuild after changing the threshold.** Editing `.env` is sufficient — restart with:
+⚠ **Rebuild required after editing `settings.py`.** Restart with:
 
 ```bash
-docker-compose up
+docker-compose up --build
 ```
 
 ## Enabling the L Component (Latent Cosine Distance)
@@ -549,5 +549,53 @@ To enable it:
 4. Restart Sentry Mode.
 
 After retraining, the system will automatically compute a reference latent vector from your calibration images at startup and enable the L component.
+
+---
+
+# 11. Inference Pipeline Improvements
+
+Three improvements were made to the detection pipeline to reduce false positives, improve Gemini accuracy, and reduce API costs.
+
+## Temporal Consistency (Anti-Flicker)
+
+A single anomalous frame no longer triggers an alert. The system maintains a rolling window of recent frames per zone and requires a minimum number of consecutive anomaly hits before firing.
+
+**Default behavior:** 3 of the last 5 frames must score above threshold.
+
+Tune in `config/settings.py`:
+
+```python
+TEMPORAL_WINDOW: int = 5
+TEMPORAL_MIN_HITS: int = 3
+```
+
+Increase `TEMPORAL_MIN_HITS` to reduce false positives. Decrease it if real threats are being missed.
+
+---
+
+## Smart Reference Selection
+
+Previously, Gemini was given the first `.jpg` found in the calibration folder as its "Normal" reference — an arbitrary choice that could itself be noisy.
+
+The system now computes a **pixel-wise median** across all calibration images at startup. This produces a single representative frame that averages out transient noise (steam, water ripple, lighting flicker) and provides Gemini with the most stable possible baseline.
+
+No configuration required. This runs automatically whenever Sentry Mode starts.
+
+---
+
+## Confidence-Gated Gemini Routing
+
+When `USE_GEMINI=True`, the system no longer always calls the Gemini API. Instead, the local classifier is run first:
+
+- If classifier confidence is **≥ 0.85**: the classifier label is used and Gemini is skipped (saves API cost).
+- If classifier confidence is **< 0.85**: Gemini is called with the median reference frame for accurate classification.
+
+Tune the gate in `config/settings.py`:
+
+```python
+CLASSIFIER_CONFIDENCE_GATE: float = 0.85
+```
+
+Lower the value to escalate more detections to Gemini. Raise it to rely more on the local classifier.
 
 ---
