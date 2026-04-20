@@ -31,9 +31,19 @@ class Settings(BaseSettings):
     AE_THRESHOLD_SSIM: float = 0.05   #has (1 - SSIM) score. edit as needed
     AE_THRESHOLD_FUSED: float = 0.15  #normalized composite score, tune after calibration
     
-    #Google Gemini integration
-    USE_GEMINI: bool = True #switch to "True" if you want to use, "False" if you don't want to use Gemini
+    #Google Gemini & Local VLM integration
+    LLM_PROVIDER: str = "gemini" # options: "gemini", "local"
+    LLM_PROMPT_TEMPLATE: str = "concise" # options: "concise", "detailed"
+    USE_GEMINI: bool = True # legacy toggle, consider LLM_PROVIDER instead
     GEMINI_API_KEY: str = "" #from .env
+    
+    # Local VLM Config (for heavier local models via Ollama/REST)
+    LOCAL_VLM_URL: str = "http://localhost:11434/api/generate"
+    LOCAL_VLM_MODEL: str = "llava:34b" # computationally expensive default
+    
+    # PTZ Stabilization
+    ALIGNMENT_ENABLED: bool = True
+    CROP_MARGIN_PERCENT: float = 0.05
 
     #Azure integration (empty string disables IoT Hub telemetry)
     IOTHUB_CONN_STRING: str = ""

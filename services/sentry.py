@@ -9,7 +9,8 @@ from pathlib import Path
 from core.camera import CameraClient
 from core.inference import InferenceEngine
 from core.state import StateManager
-from core.llm import GeminiAgent
+from core.llm import VisionAgent
+from core.alignment import FrameStabilizer
 from cloud.telemetry import TelemetrySender
 from config.settings import settings
 
@@ -20,7 +21,7 @@ class SentryLoop:
         self.stop_event = stop_event
         self.state = StateManager()
         self.telemetry = TelemetrySender()
-        self.llm = GeminiAgent()
+        self.llm = VisionAgent()
         #median calibration reference frames per zone: {zone_id: ndarray}
         self._zone_ref_frames = {}
         #rolling anomaly hit buffers per zone: {zone_id: deque[bool]}
@@ -122,6 +123,19 @@ class SentryLoop:
                     #update UI live feed
                     self.state.update(latest_frame=frame)
 
+                    #get reference frame for alignment
+                    ref_frame = self._zone_ref_frames.get(zone)
+
+                    #stabilize frame (align to reference and crop borders)
+                    if ref_frame is not None:
+                        frame, ref_frame = FrameStabilizer.stabilize(frame, ref_frame)
+                    else:
+                        #if no reference yet, just crop to keep sizes standard if we want,
+                        #but best to only run crop if we actually have something to align to, 
+                        #wait, FrameStabilizer handles None and returns current_frame uncropped.
+                        #Let's explicitly call it with None to get early exit.
+                        frame, _ = FrameStabilizer.stabilize(frame, None)
+
                     #3: anomaly score via FUSED or legacy scorer
                     if settings.TRAINING_MODE == "fused":
                         anomaly_score, fused_components = ai.detect_anomaly_fused(frame, zone_id=zone)
@@ -137,21 +151,19 @@ class SentryLoop:
                     label = "Normal"
                     llm_output = "LLM Skipped"
                     llm_text_input = self.llm.get_prompt()
-                    #use precomputed median reference instead of arbitrary first jpg
-                    ref_frame = self._zone_ref_frames.get(zone)
 
                     if is_anomaly:
                         #5: confidence-gated classification router
                         if settings.USE_GEMINI:
                             if ref_frame is not None:
-                                #run local classifier first — skip Gemini API if confidence is high enough
+                                #run local classifier first — skip VLM API if confidence is high enough
                                 clf_label, clf_conf = ai.classify_anomaly(frame)
                                 if clf_conf >= settings.CLASSIFIER_CONFIDENCE_GATE:
                                     label = clf_label
-                                    llm_output = f"Classifier (conf:{clf_conf:.2f}, Gemini skipped)"
+                                    llm_output = f"Classifier (conf:{clf_conf:.2f}, VLM skipped)"
                                     logger.info(f"High-confidence classifier: {label} ({clf_conf:.2f})")
                                 else:
-                                    #low confidence — escalate to Gemini with median reference
+                                    #low confidence — escalate to VLM with median reference
                                     llm_output = self.llm.analyze(ref_frame, frame)
                                     label = llm_output
                             else:
@@ -159,7 +171,7 @@ class SentryLoop:
                                 llm_output = "No Reference Data"
                                 label = llm_output
                         else:
-                            #Gemini disabled — use local classifier only
+                            #VLM disabled — use local classifier only
                             label, _ = ai.classify_anomaly(frame)
                             llm_output = "LLM Disabled"
 
