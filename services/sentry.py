@@ -108,13 +108,18 @@ class SentryLoop:
                 for zone in settings.ZONES:
                     if self.stop_event.is_set(): break
 
-                    #1: move camera to zone
+                    #move camera to zone
                     self.state.update(current_zone=zone, status=f"Scanning Zone {zone}...")
                     camera.move_to_preset(zone)
 
-                    #2: wait for movement to settle, then grab frame
+                    #start tracking total pipeline latency
+                    t_pipeline_start = time.perf_counter()
+
+                    #wait for movement to settle, then grab frame
                     time.sleep(0.5)
+                    t_cam_start = time.perf_counter()
                     frame = camera.get_frame()
+                    t_cam = time.perf_counter() - t_cam_start
 
                     if frame is None:
                         logger.warning("Empty frame received")
@@ -127,21 +132,21 @@ class SentryLoop:
                     ref_frame = self._zone_ref_frames.get(zone)
 
                     #stabilize frame (align to reference and crop borders)
+                    t_align_start = time.perf_counter()
                     if ref_frame is not None:
                         frame, ref_frame = FrameStabilizer.stabilize(frame, ref_frame)
                     else:
-                        #if no reference yet, just crop to keep sizes standard if we want,
-                        #but best to only run crop if we actually have something to align to, 
-                        #wait, FrameStabilizer handles None and returns current_frame uncropped.
-                        #Let's explicitly call it with None to get early exit.
                         frame, _ = FrameStabilizer.stabilize(frame, None)
+                    t_align = time.perf_counter() - t_align_start
 
-                    #3: anomaly score via FUSED or legacy scorer
+                    #compute anomaly score via FUSED or legacy metric
+                    t_scorer_start = time.perf_counter()
                     if settings.TRAINING_MODE == "fused":
                         anomaly_score, fused_components = ai.detect_anomaly_fused(frame, zone_id=zone)
                     else:
                         anomaly_score = ai.detect_anomaly(frame, zone_id=zone)
                         fused_components = {}
+                    t_scorer = time.perf_counter() - t_scorer_start
 
                     #4: temporal consistency — require TEMPORAL_MIN_HITS of last TEMPORAL_WINDOW frames
                     buf = self._get_temporal_buffer(zone)
@@ -151,28 +156,36 @@ class SentryLoop:
                     label = "Normal"
                     llm_output = "LLM Skipped"
                     llm_text_input = self.llm.get_prompt()
+                    t_clf = 0.0
+                    t_vlm = 0.0
 
                     if is_anomaly:
-                        #5: confidence-gated classification router
+                        #route anomaly to classifier or VLM based on confidence
                         if settings.USE_GEMINI:
                             if ref_frame is not None:
-                                #run local classifier first — skip VLM API if confidence is high enough
+                                t_clf_start = time.perf_counter()
                                 clf_label, clf_conf = ai.classify_anomaly(frame)
+                                t_clf = time.perf_counter() - t_clf_start
+                                
                                 if clf_conf >= settings.CLASSIFIER_CONFIDENCE_GATE:
                                     label = clf_label
                                     llm_output = f"Classifier (conf:{clf_conf:.2f}, VLM skipped)"
                                     logger.info(f"High-confidence classifier: {label} ({clf_conf:.2f})")
                                 else:
-                                    #low confidence — escalate to VLM with median reference
+                                    #escalate to VLM API with median reference
+                                    t_vlm_start = time.perf_counter()
                                     llm_output = self.llm.analyze(ref_frame, frame)
+                                    t_vlm = time.perf_counter() - t_vlm_start
                                     label = llm_output
                             else:
-                                #no calibration data yet — cannot compare to reference
+                                #handle missing calibration data
                                 llm_output = "No Reference Data"
                                 label = llm_output
                         else:
-                            #VLM disabled — use local classifier only
+                            #use local classifier only since VLM disabled
+                            t_clf_start = time.perf_counter()
                             label, _ = ai.classify_anomaly(frame)
+                            t_clf = time.perf_counter() - t_clf_start
                             llm_output = "LLM Disabled"
 
                         timestamp = datetime.now().isoformat()
@@ -190,6 +203,7 @@ class SentryLoop:
                         logger.warning(log_msg)
 
                         #upload telemetry to Azure
+                        t_io_start = time.perf_counter()
                         encoded_current = self._encode_frame(frame)
                         encoded_ref = self._encode_frame(ref_frame) if ref_frame is not None else None
                         payload = {
@@ -207,6 +221,7 @@ class SentryLoop:
                             "llm_output": llm_output
                         }
                         self.telemetry.send_payload(payload)
+                        t_io = time.perf_counter() - t_io_start
 
                         #update UI state
                         self.state.update(
@@ -237,6 +252,12 @@ class SentryLoop:
                             is_anomaly=False,
                             status=clear_msg
                         )
+                        t_io = 0.0
+
+                    t_pipeline = time.perf_counter() - t_pipeline_start
+                    
+                    #log latency metrics for streamline testing
+                    logger.debug(f"Metrics [Z{zone}] | Cam:{t_cam:.3f}s | Align:{t_align:.3f}s | Scorer:{t_scorer:.3f}s | Clf:{t_clf:.3f}s | VLM:{t_vlm:.3f}s | IO:{t_io:.3f}s | Total:{t_pipeline:.3f}s")
 
                     time.sleep(1.0 / settings.SENTRY_FPS)
 
